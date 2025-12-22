@@ -4,9 +4,12 @@ import * as PinsApi from '../api/pins';
 import { toFriendlyError } from '../api/client';
 import type { Pin } from '../types/api';
 import { Button } from '../components/Button';
+import { CATEGORIES, STATUSES, categoryById } from '../constants/requests';
+import { defaultPinMeta, getManyPinMeta, type PinMeta } from '../storage/pinMeta';
 
 export function StatsScreen() {
   const [pins, setPins] = useState<Pin[]>([]);
+  const [metaById, setMetaById] = useState<Record<number, PinMeta>>({});
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -25,13 +28,30 @@ export function StatsScreen() {
     load();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      const ids = pins.map((p) => p.id);
+      const m = await getManyPinMeta(ids);
+      setMetaById(m);
+    })();
+  }, [pins]);
+
   const stats = useMemo(() => {
     const total = pins.length;
     const withPhoto = pins.filter((p) => !!p.photo_link).length;
     const withDesc = pins.filter((p) => !!p.description && p.description.trim().length > 0).length;
-    const last = pins[0];
-    return { total, withPhoto, withDesc, last };
-  }, [pins]);
+
+    const byStatus: Record<string, number> = {};
+    const byCategory: Record<string, number> = {};
+    for (const p of pins) {
+      const meta = metaById[p.id] ?? defaultPinMeta();
+      byStatus[meta.statusId] = (byStatus[meta.statusId] ?? 0) + 1;
+      byCategory[meta.categoryId] = (byCategory[meta.categoryId] ?? 0) + 1;
+    }
+
+    const last = [...pins].sort((a, b) => b.id - a.id)[0];
+    return { total, withPhoto, withDesc, last, byStatus, byCategory };
+  }, [pins, metaById]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -64,6 +84,30 @@ export function StatsScreen() {
         )}
       </View>
 
+      <View style={styles.card}>
+        <Text style={styles.h}>По статусам</Text>
+        <View style={{ gap: 8, marginTop: 8 }}>
+          {STATUSES.map((s) => (
+            <View key={s.id} style={styles.statRow}>
+              <Text style={styles.text}>{s.title}</Text>
+              <Text style={styles.mono}>{stats.byStatus[s.id] ?? 0}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.h}>По категориям</Text>
+        <View style={{ gap: 8, marginTop: 8 }}>
+          {CATEGORIES.map((c) => (
+            <View key={c.id} style={styles.statRow}>
+              <Text style={styles.text}>{c.emoji} {c.title}</Text>
+              <Text style={styles.mono}>{stats.byCategory[c.id] ?? 0}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
       <Button title={busy ? 'Обновляем…' : 'Обновить'} onPress={load} disabled={busy} />
     </ScrollView>
   );
@@ -78,4 +122,5 @@ const styles = StyleSheet.create({
   text: { fontSize: 14 },
   mono: { fontFamily: 'Courier', fontSize: 16 },
   small: { fontSize: 12, opacity: 0.7 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

@@ -4,7 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { register } from '../api/auth';
-import type { AuthStackParamList } from '../navigation/authStack';
+import type { AuthStackParamList } from '../navigation/types';
 import { toFriendlyError } from '../api/client';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;

@@ -13,9 +13,19 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Нужно, чтобы вы могли сфотографировать проблему.",
+        "NSPhotoLibraryUsageDescription": "Нужно, чтобы вы могли выбрать фото из галереи.",
+        "NSPhotoLibraryAddUsageDescription": "Нужно, чтобы вы могли сохранять фотографии в галерею (если потребуется)."
+      }
     },
     "android": {
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
