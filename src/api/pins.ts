@@ -1,10 +1,15 @@
 import { api, TOKEN_KEY } from './client';
-import type { Pin, PinCreate } from '../types/api';
+import type { Pin, PinCreate, PinUpdate } from '../types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/config';
 
 export async function getPins(skip = 0, limit = 100): Promise<Pin[]> {
   const res = await api.get<Pin[]>('/pins/', { params: { skip, limit } });
+  return res.data;
+}
+
+export async function getPin(id: number): Promise<Pin> {
+  const res = await api.get<Pin>(`/pins/${id}`);
   return res.data;
 }
 
@@ -77,7 +82,13 @@ export async function uploadPinPhoto(photoUri: string): Promise<string> {
  * Нужны для сценария «просмотр/редактирование заявки» из курсовой.
  */
 export async function updatePin(id: number, payload: PinCreate): Promise<Pin> {
+  // Admin-only. Backend supports both PUT and PATCH.
   const res = await api.put<Pin>(`/pins/${id}`, payload);
+  return res.data;
+}
+
+export async function patchPin(id: number, payload: PinUpdate): Promise<Pin> {
+  const res = await api.patch<Pin>(`/pins/${id}`, payload);
   return res.data;
 }
 

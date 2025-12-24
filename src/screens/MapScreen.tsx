@@ -11,7 +11,7 @@ import { DEFAULT_REGION } from '../utils/config';
 import { useAuth } from '../context/AuthContext';
 import { CATEGORIES, STATUSES, categoryById, type RequestCategoryId, type RequestStatusId } from '../constants/requests';
 import { Chip } from '../components/Chip';
-import { defaultPinMeta, getManyPinMeta, type PinMeta } from '../storage/pinMeta';
+// Category and status are stored server-side.
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -21,7 +21,7 @@ type FocusParams = { latitude: number; longitude: number; pinId?: number };
 type MapRouteParams = { focus?: FocusParams } | undefined;
 
 type ClusterItem =
-  | { kind: 'pin'; pin: Pin; meta: PinMeta }
+  | { kind: 'pin'; pin: Pin }
   | { kind: 'cluster'; count: number; center: LatLng; ids: number[] };
 
 export function MapScreen() {
@@ -33,7 +33,6 @@ export function MapScreen() {
 
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
   const [pins, setPins] = useState<Pin[]>([]);
-  const [metaById, setMetaById] = useState<Record<number, PinMeta>>({});
   const [busy, setBusy] = useState(false);
 
   // фильтры (для карты)
@@ -61,13 +60,6 @@ export function MapScreen() {
     if (token) loadPins();
   }, [token]);
 
-  useEffect(() => {
-    (async () => {
-      const ids = pins.map((p) => p.id);
-      const m = await getManyPinMeta(ids);
-      setMetaById(m);
-    })();
-  }, [pins]);
 
   // геолокация + маркер текущего местоположения (с обновлением)
   useEffect(() => {
@@ -119,14 +111,12 @@ export function MapScreen() {
   }, [route.params]);
 
   const filteredPins = useMemo(() => {
-    return pins
-      .map((p) => ({ pin: p, meta: metaById[p.id] ?? defaultPinMeta() }))
-      .filter(({ meta }) => {
-        if (status !== 'all' && meta.statusId !== status) return false;
-        if (category !== 'all' && meta.categoryId !== category) return false;
-        return true;
-      });
-  }, [pins, metaById, status, category]);
+    return pins.filter((p) => {
+      if (status !== 'all' && (p.status_id as any) !== status) return false;
+      if (category !== 'all' && (p.category_id as any) !== category) return false;
+      return true;
+    });
+  }, [pins, status, category]);
 
   /**
    * Простая «кластеризация» без внешних библиотек:
@@ -146,17 +136,17 @@ export function MapScreen() {
     const minLat = region.latitude - latDelta / 2;
     const minLon = region.longitude - lonDelta / 2;
 
-    const buckets = new Map<string, { ids: number[]; pins: { pin: Pin; meta: PinMeta }[]; sumLat: number; sumLon: number }>();
+    const buckets = new Map<string, { ids: number[]; pins: Pin[]; sumLat: number; sumLon: number }>();
 
-    for (const it of filteredPins) {
-      const i = Math.floor((it.pin.y - minLat) / cellLat);
-      const j = Math.floor((it.pin.x - minLon) / cellLon);
+    for (const pin of filteredPins) {
+      const i = Math.floor((pin.y - minLat) / cellLat);
+      const j = Math.floor((pin.x - minLon) / cellLon);
       const key = `${i}:${j}`;
       const b = buckets.get(key) ?? { ids: [], pins: [], sumLat: 0, sumLon: 0 };
-      b.ids.push(it.pin.id);
-      b.pins.push(it);
-      b.sumLat += it.pin.y;
-      b.sumLon += it.pin.x;
+      b.ids.push(pin.id);
+      b.pins.push(pin);
+      b.sumLat += pin.y;
+      b.sumLon += pin.x;
       buckets.set(key, b);
     }
 
@@ -164,7 +154,7 @@ export function MapScreen() {
     for (const b of buckets.values()) {
       if (b.pins.length === 1) {
         const only = b.pins[0];
-        out.push({ kind: 'pin', pin: only.pin, meta: only.meta });
+        out.push({ kind: 'pin', pin: only });
       } else {
         out.push({
           kind: 'cluster',
@@ -222,7 +212,7 @@ export function MapScreen() {
             );
           }
 
-          const cat = categoryById(it.meta.categoryId);
+          const cat = categoryById((it.pin.category_id as any) ?? 'other');
           return (
             <Marker
               key={it.pin.id}

@@ -8,6 +8,7 @@ export type User = {
   phone_number: string;
   email?: string | null;
   username?: string | null;
+  role_id?: number | null;
 };
 
 export type UserCreate = {
@@ -27,6 +28,12 @@ export type Pin = {
   y: number;
   photo_link: string;
   description?: string | null;
+
+  // Server-side meta (admin can change status)
+  category_id: string;
+  status_id: string;
 };
 
 export type PinCreate = Omit<Pin, 'id'>;
+
+export type PinUpdate = Partial<PinCreate>;

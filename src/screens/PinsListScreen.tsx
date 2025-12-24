@@ -13,7 +13,7 @@ import { Chip } from '../components/Chip';
 import { Input } from '../components/Input';
 import { StatusBadge } from '../components/StatusBadge';
 import { CATEGORIES, STATUSES, categoryById, type RequestCategoryId, type RequestStatusId } from '../constants/requests';
-import { getManyPinMeta, defaultPinMeta, type PinMeta } from '../storage/pinMeta';
+// Category and status are stored server-side.
 import type { AppStackParamList, AppTabsParamList } from '../navigation/types';
 import { DEFAULT_REGION } from '../utils/config';
 
@@ -47,23 +47,13 @@ export function PinsListScreen() {
     load();
   }, []);
 
-  const [metaById, setMetaById] = useState<Record<number, PinMeta>>({});
-
-  useEffect(() => {
-    (async () => {
-      const ids = pins.map((p) => p.id);
-      const m = await getManyPinMeta(ids);
-      setMetaById(m);
-    })();
-  }, [pins]);
-
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     return pins
-      .map((pin) => ({ pin, meta: metaById[pin.id] ?? defaultPinMeta() }))
-      .filter(({ pin, meta }) => {
-        if (status !== 'all' && meta.statusId !== status) return false;
-        if (category !== 'all' && meta.categoryId !== category) return false;
+      .map((pin) => ({ pin }))
+      .filter(({ pin }) => {
+        if (status !== 'all' && (pin.status_id as any) !== status) return false;
+        if (category !== 'all' && (pin.category_id as any) !== category) return false;
         if (query) {
           // Не включаем photo_link в поиск: при хранении base64 это может быть очень большая строка
           const hay = `${pin.description ?? ''} #${pin.id}`.toLowerCase();
@@ -71,7 +61,7 @@ export function PinsListScreen() {
         }
         return true;
       });
-  }, [pins, metaById, status, category, q]);
+  }, [pins, status, category, q]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -130,8 +120,7 @@ export function PinsListScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const meta = item.meta ?? defaultPinMeta();
-          const cat = categoryById(meta.categoryId);
+          const cat = categoryById((item.pin.category_id as any) ?? 'other');
           return (
             <Pressable
               onPress={() => navigation.navigate('PinDetails', { pinId: item.pin.id })}
@@ -141,7 +130,7 @@ export function PinsListScreen() {
                 <Text style={styles.cardTitle} numberOfLines={1}>
                   {cat.emoji} {cat.title}
                 </Text>
-                <StatusBadge statusId={meta.statusId} />
+                <StatusBadge statusId={((item.pin.status_id as any) ?? 'new') as any} />
               </View>
               <Text style={styles.text} numberOfLines={2}>
                 {item.pin.description?.trim() ? item.pin.description : '—'}

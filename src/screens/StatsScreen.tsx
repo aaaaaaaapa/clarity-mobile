@@ -4,12 +4,10 @@ import * as PinsApi from '../api/pins';
 import { toFriendlyError } from '../api/client';
 import type { Pin } from '../types/api';
 import { Button } from '../components/Button';
-import { CATEGORIES, STATUSES, categoryById } from '../constants/requests';
-import { defaultPinMeta, getManyPinMeta, type PinMeta } from '../storage/pinMeta';
+import { CATEGORIES, STATUSES } from '../constants/requests';
 
 export function StatsScreen() {
   const [pins, setPins] = useState<Pin[]>([]);
-  const [metaById, setMetaById] = useState<Record<number, PinMeta>>({});
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -28,13 +26,7 @@ export function StatsScreen() {
     load();
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      const ids = pins.map((p) => p.id);
-      const m = await getManyPinMeta(ids);
-      setMetaById(m);
-    })();
-  }, [pins]);
+  // Category/status are stored server-side.
 
   const stats = useMemo(() => {
     const total = pins.length;
@@ -44,14 +36,15 @@ export function StatsScreen() {
     const byStatus: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
     for (const p of pins) {
-      const meta = metaById[p.id] ?? defaultPinMeta();
-      byStatus[meta.statusId] = (byStatus[meta.statusId] ?? 0) + 1;
-      byCategory[meta.categoryId] = (byCategory[meta.categoryId] ?? 0) + 1;
+      const st = (p.status_id as any) ?? 'new';
+      const cat = (p.category_id as any) ?? 'other';
+      byStatus[st] = (byStatus[st] ?? 0) + 1;
+      byCategory[cat] = (byCategory[cat] ?? 0) + 1;
     }
 
     const last = [...pins].sort((a, b) => b.id - a.id)[0];
     return { total, withPhoto, withDesc, last, byStatus, byCategory };
-  }, [pins, metaById]);
+  }, [pins]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>

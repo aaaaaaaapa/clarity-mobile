@@ -11,14 +11,17 @@ import { toFriendlyError } from '../api/client';
 import * as PinsApi from '../api/pins';
 import type { Pin, PinCreate } from '../types/api';
 import { CATEGORIES, STATUSES, categoryById, statusById, type RequestCategoryId, type RequestStatusId } from '../constants/requests';
-import { defaultPinMeta, getPinMeta, setPinMeta } from '../storage/pinMeta';
 import type { AppStackParamList } from '../navigation/types';
 import { isLocalPhotoUri, photoToImageUri } from '../utils/photo';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PinDetails'>;
 
 export function PinDetailsScreen({ navigation, route }: Props) {
   const { pinId } = route.params;
+
+  const { user } = useAuth();
+  const isAdmin = user?.role_id === 2;
 
   const [pin, setPin] = useState<Pin | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,19 +42,24 @@ export function PinDetailsScreen({ navigation, route }: Props) {
   async function load() {
     try {
       setLoading(true);
-      // На бэке может не быть GET /pins/{id}, поэтому подтягиваем список и ищем
-      const all = await PinsApi.getPins(0, 500);
-      const found = all.find((p) => p.id === pinId) ?? null;
+      // Prefer GET /pins/{id}; fallback to list for backward compatibility.
+      let found: Pin | null = null;
+      try {
+        found = await PinsApi.getPin(pinId);
+      } catch {
+        const all = await PinsApi.getPins(0, 500);
+        found = all.find((p) => p.id === pinId) ?? null;
+      }
       setPin(found);
-
-      const meta = (await getPinMeta(pinId)) ?? defaultPinMeta();
-      setCategoryId(meta.categoryId);
-      setStatusId(meta.statusId);
 
       if (found) {
         setDescr(found.description ?? '');
         setPhotoLink(found.photo_link ?? '');
         setPhotoUri(photoToImageUri(found.photo_link ?? ''));
+
+        // server-side meta
+        setCategoryId((found.category_id as any) ?? 'other');
+        setStatusId((found.status_id as any) ?? 'new');
       }
     } catch (e) {
       Alert.alert('Не удалось загрузить', toFriendlyError(e));
@@ -160,6 +168,8 @@ export function PinDetailsScreen({ navigation, route }: Props) {
         y: pin.y,
         photo_link: finalPhotoLink,
         description: descr.trim() ? descr.trim() : null,
+        category_id: categoryId,
+        status_id: statusId,
       };
 
       // 1) пытаемся обновить на сервере
@@ -170,9 +180,6 @@ export function PinDetailsScreen({ navigation, route }: Props) {
         // если эндпоинта нет — не считаем это фатальной ошибкой для курсового UI
         console.log('updatePin failed, saving locally only', e);
       }
-
-      // 2) всегда сохраняем meta локально (категория/статус)
-      await setPinMeta(pin.id, { categoryId, statusId, updatedAt: Date.now() });
 
       setPhotoLink(finalPhotoLink);
 
@@ -314,13 +321,15 @@ export function PinDetailsScreen({ navigation, route }: Props) {
                 setDescr(pin.description ?? '');
                 setPhotoLink(pin.photo_link ?? '');
                 setPhotoUri(photoToImageUri(pin.photo_link ?? ''));
+                setCategoryId((pin.category_id as any) ?? 'other');
+                setStatusId((pin.status_id as any) ?? 'new');
               }}
               disabled={busy}
             />
           </>
-        ) : (
+        ) : isAdmin ? (
           <Button title="Редактировать" onPress={() => setEdit(true)} />
-        )}
+        ) : null}
       </View>
     </ScrollView>
   );

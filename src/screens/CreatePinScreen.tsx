@@ -11,13 +11,15 @@ import { toFriendlyError } from '../api/client';
 import * as PinsApi from '../api/pins';
 import type { PinCreate } from '../types/api';
 import { CATEGORIES, STATUSES, type RequestCategoryId, type RequestStatusId } from '../constants/requests';
-import { setPinMeta } from '../storage/pinMeta';
 import type { AppStackParamList } from '../navigation/types';
 import { isLocalPhotoUri, photoToImageUri } from '../utils/photo';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'CreatePin'>;
 
 export function CreatePinScreen({ navigation, route }: Props) {
+  const { user } = useAuth();
+  const isAdmin = user?.role_id === 2;
   const { initialLat, initialLon } = route.params;
 
   const [lat, setLat] = useState(initialLat);
@@ -165,10 +167,11 @@ export function CreatePinScreen({ navigation, route }: Props) {
         y: lat,
         photo_link,
         description: descr.trim() ? descr.trim() : null,
+        category_id: categoryId,
+        status_id: isAdmin ? statusId : 'new',
       };
 
       const created = await PinsApi.createPin(payload);
-      await setPinMeta(created.id, { categoryId, statusId, updatedAt: Date.now() });
       Alert.alert('Готово', 'Заявка создана');
       navigation.goBack();
     } catch (e) {
@@ -204,11 +207,15 @@ export function CreatePinScreen({ navigation, route }: Props) {
 
       <View style={styles.card}>
         <Text style={styles.h}>Статус</Text>
-        <View style={styles.chipsRow}>
-          {STATUSES.map((s) => (
-            <Chip key={s.id} title={s.title} selected={statusId === s.id} onPress={() => setStatusId(s.id)} />
-          ))}
-        </View>
+        {isAdmin ? (
+          <View style={styles.chipsRow}>
+            {STATUSES.map((s) => (
+              <Chip key={s.id} title={s.title} selected={statusId === s.id} onPress={() => setStatusId(s.id)} />
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.small}>Статус выставляет администратор. По умолчанию: «Новая».</Text>
+        )}
       </View>
 
       <View style={styles.card}>
