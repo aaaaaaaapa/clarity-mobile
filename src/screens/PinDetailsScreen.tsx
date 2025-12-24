@@ -13,15 +13,32 @@ import type { Pin, PinCreate } from '../types/api';
 import { CATEGORIES, STATUSES, categoryById, statusById, type RequestCategoryId, type RequestStatusId } from '../constants/requests';
 import type { AppStackParamList } from '../navigation/types';
 import { isLocalPhotoUri, photoToImageUri } from '../utils/photo';
+import { formatPinCreatedAt } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PinDetails'>;
+
+function getPinOwnerId(pin: any): number | null {
+  const raw =
+    pin?.owner_id ??
+    pin?.ownerId ??
+    pin?.user_id ??
+    pin?.userId ??
+    pin?.created_by ??
+    pin?.creator_id ??
+    pin?.createdBy ??
+    null;
+
+  const num = typeof raw === 'string' ? Number(raw) : raw;
+  return Number.isFinite(num) ? Number(num) : null;
+}
 
 export function PinDetailsScreen({ navigation, route }: Props) {
   const { pinId } = route.params;
 
   const { user } = useAuth();
   const isAdmin = user?.role_id === 2;
+  const currentUserId = user?.id ?? null;
 
   const [pin, setPin] = useState<Pin | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,6 +55,13 @@ export function PinDetailsScreen({ navigation, route }: Props) {
 
   const hasPhoto = useMemo(() => !!photoUri.trim(), [photoUri]);
   const previewUri = useMemo(() => photoToImageUri(photoUri), [photoUri]);
+
+  const createdText = useMemo(() => (pin ? formatPinCreatedAt(pin as any) : null), [pin]);
+
+  const ownerId = useMemo(() => (pin ? getPinOwnerId(pin as any) : null), [pin]);
+  const isOwner = !!currentUserId && ownerId === currentUserId;
+  const canEdit = isAdmin || (isOwner && statusId === 'new');
+  const showNoEditNote = isOwner && !isAdmin && statusId !== 'new';
 
   async function load() {
     try {
@@ -72,6 +96,16 @@ export function PinDetailsScreen({ navigation, route }: Props) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinId]);
+
+  useEffect(() => {
+    if (edit && !canEdit) {
+      setEdit(false);
+      Alert.alert(
+        'Редактирование недоступно',
+        'Изменять заявку может её создатель только в статусе «Новая» либо администратор.'
+      );
+    }
+  }, [edit, canEdit]);
 
   async function pickImage(source: 'camera' | 'library') {
     try {
@@ -145,6 +179,15 @@ export function PinDetailsScreen({ navigation, route }: Props) {
 
   async function onSave() {
     if (!pin) return;
+
+    if (!canEdit) {
+      Alert.alert(
+        'Редактирование недоступно',
+        'Изменять заявку может её создатель только в статусе «Новая» либо администратор.'
+      );
+      return;
+    }
+
     if (!photoUri.trim()) {
       Alert.alert('Фото обязательно', 'Сфотографируйте проблему или выберите фото из галереи.');
       return;
@@ -169,7 +212,8 @@ export function PinDetailsScreen({ navigation, route }: Props) {
         photo_link: finalPhotoLink,
         description: descr.trim() ? descr.trim() : null,
         category_id: categoryId,
-        status_id: statusId,
+        // Статус меняет только администратор
+        status_id: isAdmin ? statusId : ((pin.status_id as any) ?? statusId),
       };
 
       // 1) пытаемся обновить на сервере
@@ -230,6 +274,7 @@ export function PinDetailsScreen({ navigation, route }: Props) {
         <StatusBadge statusId={statusId} />
         <Text style={styles.small}>Категория: {cat.emoji} {cat.title}</Text>
         <Text style={styles.small}>Координаты: {pin.y.toFixed(6)}, {pin.x.toFixed(6)}</Text>
+        {createdText ? <Text style={styles.small}>Создано: {createdText}</Text> : null}
       </View>
 
       <View style={styles.card}>
@@ -296,12 +341,23 @@ export function PinDetailsScreen({ navigation, route }: Props) {
             </View>
 
             <Text style={[styles.small, { marginTop: 10 }]}>Статус</Text>
-            <View style={styles.chipsRow}>
-              {STATUSES.map((s) => (
-                <Chip key={s.id} title={s.title} selected={statusId === s.id} onPress={() => setStatusId(s.id)} />
-              ))}
-            </View>
-            <Text style={[styles.small, { marginTop: 10 }]}>Цвет статуса: {st.color}</Text>
+            {isAdmin ? (
+              <>
+                <View style={styles.chipsRow}>
+                  {STATUSES.map((s) => (
+                    <Chip
+                      key={s.id}
+                      title={s.title}
+                      selected={statusId === s.id}
+                      onPress={() => setStatusId(s.id)}
+                    />
+                  ))}
+                </View>
+                <Text style={[styles.small, { marginTop: 10 }]}>Цвет статуса: {st.color}</Text>
+              </>
+            ) : (
+              <Text style={styles.small}>Статус может менять только администратор: {st.title}</Text>
+            )}
           </>
         ) : (
           <Text style={styles.text}>{cat.emoji} {cat.title} · {st.title}</Text>
@@ -327,9 +383,17 @@ export function PinDetailsScreen({ navigation, route }: Props) {
               disabled={busy}
             />
           </>
-        ) : isAdmin ? (
-          <Button title="Редактировать" onPress={() => setEdit(true)} />
-        ) : null}
+        ) : (
+          <>
+            {showNoEditNote ? (
+              <Text style={styles.note}>
+                Редактирование доступно только в статусе «Новая». Сейчас статус: {st.title}.
+              </Text>
+            ) : null}
+
+            {canEdit ? <Button title="Редактировать" onPress={() => setEdit(true)} /> : null}
+          </>
+        )}
       </View>
     </ScrollView>
   );
@@ -342,6 +406,7 @@ const styles = StyleSheet.create({
   h: { fontSize: 16, fontWeight: '800' },
   text: { fontSize: 14 },
   small: { fontSize: 12, opacity: 0.7 },
+  note: { fontSize: 12, opacity: 0.85 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   preview: { height: 200, borderRadius: 12, backgroundColor: '#f3f4f6' },
   photoRow: { flexDirection: 'row', gap: 10 },

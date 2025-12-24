@@ -17,12 +17,15 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Нужно, чтобы вы могли сфотографировать проблему.",
         "NSPhotoLibraryUsageDescription": "Нужно, чтобы вы могли выбрать фото из галереи.",
-        "NSPhotoLibraryAddUsageDescription": "Нужно, чтобы вы могли сохранять фотографии в галерею (если потребуется)."
+        "NSPhotoLibraryAddUsageDescription": "Нужно, чтобы вы могли сохранять фотографии в галерею (если потребуется).",
+        "NSLocationWhenInUseUsageDescription": "Нужно, чтобы определить ваше местоположение и выбрать точку на карте."
       }
     },
     "android": {
       "permissions": [
         "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"
       ],

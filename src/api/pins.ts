@@ -3,10 +3,15 @@ import type { Pin, PinCreate, PinUpdate } from '../types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/config';
 
-export async function getPins(skip = 0, limit = 100): Promise<Pin[]> {
-  const res = await api.get<Pin[]>('/pins/', { params: { skip, limit } });
+export async function getPins(
+  skip = 0,
+  limit = 100,
+  extraParams?: Record<string, any>
+): Promise<Pin[]> {
+  const res = await api.get<Pin[]>('/pins/', { params: { skip, limit, ...(extraParams ?? {}) } });
   return res.data;
 }
+
 
 export async function getPin(id: number): Promise<Pin> {
   const res = await api.get<Pin>(`/pins/${id}`);

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -21,8 +21,8 @@ type FocusParams = { latitude: number; longitude: number; pinId?: number };
 type MapRouteParams = { focus?: FocusParams } | undefined;
 
 type ClusterItem =
-  | { kind: 'pin'; pin: Pin }
-  | { kind: 'cluster'; count: number; center: LatLng; ids: number[] };
+  | { kind: 'pin'; key: string; pin: Pin; coord?: LatLng }
+  | { kind: 'cluster'; key: string; count: number; center: LatLng; ids: number[] };
 
 export function MapScreen() {
   const { token } = useAuth();
@@ -31,7 +31,71 @@ export function MapScreen() {
 
   const mapRef = useRef<MapView>(null);
 
+  // Иногда MapView (особенно на Android) может триггерить onRegionChangeComplete
+  // даже без видимого движения. Если слепо сетать state — будут лишние перерендеры
+  // и «дёргание» кастомных маркеров/кластеров.
+  const lastRegionRef = useRef<Region>(DEFAULT_REGION);
+
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
+  const setRegionSafe = (next: Region) => {
+    lastRegionRef.current = next;
+    setRegion(next);
+  };
+
+  // На Android кастомные маркеры (Marker с дочерним View) могут становиться невидимыми,
+  // если tracksViewChanges выключен в момент их монтирования (например, когда кластер распадается
+  // на отдельные метки при зуме). Поэтому мы включаем tracksViewChanges на короткое время при:
+  // - первой загрузке меток
+  // - смене фильтров
+  // - заметном изменении масштаба (zoom)
+  const tracksTimerRef = useRef<any>(null);
+  const lastZoomRef = useRef<number>(DEFAULT_REGION.latitudeDelta);
+  const [tracksPins, setTracksPins] = useState<boolean>(Platform.OS === 'android');
+
+  const enableTracksPinsTemporarily = (ms = 650) => {
+    // На iOS можно держать выключенным почти всегда.
+    if (Platform.OS !== 'android') return;
+    setTracksPins(true);
+    if (tracksTimerRef.current) clearTimeout(tracksTimerRef.current);
+    tracksTimerRef.current = setTimeout(() => setTracksPins(false), ms);
+  };
+
+  const onRegionChangeComplete = (next: Region) => {
+    const prev = lastRegionRef.current;
+    // Достаточно «мягкого» эпсилона, чтобы игнорировать микроколебания.
+    const eps = 1e-5;
+    if (
+      Math.abs(prev.latitude - next.latitude) < eps &&
+      Math.abs(prev.longitude - next.longitude) < eps &&
+      Math.abs(prev.latitudeDelta - next.latitudeDelta) < eps &&
+      Math.abs(prev.longitudeDelta - next.longitudeDelta) < eps
+    ) {
+      return;
+    }
+    setRegionSafe(next);
+
+    // Если пользователь заметно сдвинул карту (pan), на экране могут смонтироваться новые пины.
+    // На Android они иногда становятся невидимыми, если tracksViewChanges выключен в момент монтирования.
+    // Поэтому кратковременно включаем tracksViewChanges при существенном перемещении.
+    const refDeltaLat = Math.max(prev.latitudeDelta, next.latitudeDelta, 0.001);
+    const refDeltaLon = Math.max(prev.longitudeDelta, next.longitudeDelta, 0.001);
+    const movedALot =
+      Math.abs(next.latitude - prev.latitude) > refDeltaLat * 0.18 ||
+      Math.abs(next.longitude - prev.longitude) > refDeltaLon * 0.18;
+    if (movedALot) {
+      enableTracksPinsTemporarily(650);
+    }
+
+    // если заметно изменился масштаб — даём меткам шанс перерендериться
+    // (кластер может распасться на пины, и им нужно успеть отрисоваться до выключения tracksViewChanges)
+    const prevZoom = lastZoomRef.current;
+    const nextZoom = next.latitudeDelta;
+    // считаем «значимым» изменение на 12% и более
+    if (prevZoom > 0 && Math.abs(nextZoom - prevZoom) / prevZoom >= 0.12) {
+      lastZoomRef.current = nextZoom;
+      enableTracksPinsTemporarily(700);
+    }
+  };
   const [pins, setPins] = useState<Pin[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -39,6 +103,19 @@ export function MapScreen() {
   const [status, setStatus] = useState<RequestStatusId | 'all'>('all');
   const [category, setCategory] = useState<RequestCategoryId | 'all'>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Для кластеров на Android оставляем tracksViewChanges включённым всегда,
+  // чтобы они не «пропадали» при снапшоте.
+  const tracksClusters = Platform.OS === 'android';
+
+  useEffect(() => {
+    enableTracksPinsTemporarily(700);
+    return () => {
+      if (tracksTimerRef.current) clearTimeout(tracksTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pins.length, status, category]);
+
 
   // текущая позиция пользователя
   const [userPos, setUserPos] = useState<LatLng | null>(null);
@@ -106,7 +183,7 @@ export function MapScreen() {
       latitudeDelta: 0.02,
       longitudeDelta: 0.02,
     };
-    setRegion(next);
+    setRegionSafe(next);
     mapRef.current?.animateToRegion(next, 350);
   }, [route.params]);
 
@@ -128,8 +205,15 @@ export function MapScreen() {
     const latDelta = Math.max(region.latitudeDelta, 0.001);
     const lonDelta = Math.max(region.longitudeDelta, 0.001);
 
+    // На очень близком зуме кластеры могут «не распадаться» (особенно если несколько заявок
+    // имеют одинаковые/очень близкие координаты). В этом режиме показываем отдельные метки,
+    // а «плотные» группы слегка «расползаются» вокруг центра (spiderfy).
+    const DISABLE_CLUSTER_DELTA = 0.007;
+    const disableClustering = latDelta <= DISABLE_CLUSTER_DELTA && lonDelta <= DISABLE_CLUSTER_DELTA;
+
     // чем дальше от масштаба, тем крупнее клетки
-    const grid = 10;
+    // (увеличили детализацию, чтобы кластеры распадались раньше)
+    const grid = 14;
     const cellLat = latDelta / grid;
     const cellLon = lonDelta / grid;
 
@@ -151,13 +235,37 @@ export function MapScreen() {
     }
 
     const out: ClusterItem[] = [];
-    for (const b of buckets.values()) {
+    for (const [bucketKey, b] of buckets.entries()) {
       if (b.pins.length === 1) {
         const only = b.pins[0];
-        out.push({ kind: 'pin', pin: only });
-      } else {
+        out.push({ kind: 'pin', key: `p-${only.id}`, pin: only });
+        continue;
+      }
+
+      if (disableClustering) {
+        // spiderfy вокруг центра бакета
+        const n = b.pins.length;
+        const center = { latitude: b.sumLat / n, longitude: b.sumLon / n };
+        // радиус зависит от масштаба, чтобы на близком зуме «разбежались», а не улетели далеко
+        const radiusLat = Math.max(latDelta, 0.001) * 0.18;
+        const radiusLon = Math.max(lonDelta, 0.001) * 0.18;
+        const sorted = [...b.pins].sort((a, c) => a.id - c.id);
+        for (let idx = 0; idx < sorted.length; idx++) {
+          const pin = sorted[idx];
+          const angle = (2 * Math.PI * idx) / n;
+          const coord = {
+            latitude: center.latitude + radiusLat * Math.cos(angle),
+            longitude: center.longitude + radiusLon * Math.sin(angle),
+          };
+          out.push({ kind: 'pin', key: `p-${pin.id}`, pin, coord });
+        }
+        continue;
+      }
+
+      {
         out.push({
           kind: 'cluster',
+          key: `c-${bucketKey}`,
           count: b.pins.length,
           ids: b.ids,
           center: { latitude: b.sumLat / b.pins.length, longitude: b.sumLon / b.pins.length },
@@ -171,10 +279,10 @@ export function MapScreen() {
     const next: Region = {
       latitude: center.latitude,
       longitude: center.longitude,
-      latitudeDelta: Math.max(region.latitudeDelta / 2, 0.01),
-      longitudeDelta: Math.max(region.longitudeDelta / 2, 0.01),
+      latitudeDelta: Math.max(region.latitudeDelta / 2, 0.002),
+      longitudeDelta: Math.max(region.longitudeDelta / 2, 0.002),
     };
-    setRegion(next);
+    setRegionSafe(next);
     mapRef.current?.animateToRegion(next, 250);
   }
 
@@ -185,8 +293,7 @@ export function MapScreen() {
         provider={PROVIDER_DEFAULT}
         style={{ flex: 1 }}
         initialRegion={DEFAULT_REGION}
-        region={region}
-        onRegionChangeComplete={setRegion}
+        onRegionChangeComplete={onRegionChangeComplete}
         onLongPress={(ev) =>
           navigation.navigate('CreatePin', {
             initialLat: ev.nativeEvent.coordinate.latitude,
@@ -197,16 +304,19 @@ export function MapScreen() {
         {/* маркер текущей позиции */}
         {userPos && <Marker key="me" coordinate={userPos} title="Вы здесь" />}
 
-        {clusterItems.map((it, idx) => {
+        {clusterItems.map((it) => {
           if (it.kind === 'cluster') {
             return (
               <Marker
-                key={`c-${idx}`}
+                key={it.key}
                 coordinate={it.center}
                 onPress={() => zoomToCluster(it.center)}
+                tracksViewChanges={tracksClusters}
               >
-                <View style={styles.cluster}>
-                  <Text style={styles.clusterText}>{it.count}</Text>
+                <View style={styles.clusterOuter}>
+                  <View style={styles.clusterInner}>
+                    <Text style={styles.clusterText}>{it.count}</Text>
+                  </View>
                 </View>
               </Marker>
             );
@@ -215,9 +325,10 @@ export function MapScreen() {
           const cat = categoryById((it.pin.category_id as any) ?? 'other');
           return (
             <Marker
-              key={it.pin.id}
-              coordinate={{ latitude: it.pin.y, longitude: it.pin.x }}
+              key={it.key}
+              coordinate={it.coord ?? { latitude: it.pin.y, longitude: it.pin.x }}
               onPress={() => navigation.navigate('PinDetails', { pinId: it.pin.id })}
+              tracksViewChanges={tracksPins}
             >
               <View style={styles.pinMarker}>
                 <Text style={styles.pinEmoji}>{cat.emoji}</Text>
@@ -285,15 +396,25 @@ const styles = StyleSheet.create({
   fabText: { color: '#fff', fontSize: 30, marginTop: -2 },
   smallBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(17,17,17,0.9)' },
   smallBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  cluster: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  // В Android кастомные маркеры могут выглядеть «обрезанными» из‑за рендера в bitmap.
+  // Делаем круг через два слоя (внешний белый «бордер», внутренний тёмный круг).
+  clusterOuter: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  clusterInner: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
     backgroundColor: '#111',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
+    overflow: 'hidden',
   },
   clusterText: { color: '#fff', fontWeight: '900', fontSize: 14 },
   pinMarker: {

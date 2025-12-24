@@ -10,23 +10,27 @@ import { Input } from '../components/Input';
 import { toFriendlyError } from '../api/client';
 import * as PinsApi from '../api/pins';
 import type { PinCreate } from '../types/api';
-import { CATEGORIES, STATUSES, type RequestCategoryId, type RequestStatusId } from '../constants/requests';
+import { CATEGORIES, type RequestCategoryId } from '../constants/requests';
 import type { AppStackParamList } from '../navigation/types';
 import { isLocalPhotoUri, photoToImageUri } from '../utils/photo';
-import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'CreatePin'>;
 
 export function CreatePinScreen({ navigation, route }: Props) {
-  const { user } = useAuth();
-  const isAdmin = user?.role_id === 2;
-  const { initialLat, initialLon } = route.params;
+  const { initialLat, initialLon, pickedLat, pickedLon } = route.params;
 
   const [lat, setLat] = useState(initialLat);
   const [lon, setLon] = useState(initialLon);
 
+  // если вернулись из выбора точки на карте — обновляем координаты
+  useEffect(() => {
+    if (typeof pickedLat === 'number' && typeof pickedLon === 'number') {
+      setLat(pickedLat);
+      setLon(pickedLon);
+    }
+  }, [pickedLat, pickedLon]);
+
   const [categoryId, setCategoryId] = useState<RequestCategoryId | null>(null);
-  const [statusId, setStatusId] = useState<RequestStatusId>('new');
 
   const [descr, setDescr] = useState('');
   const [photoUri, setPhotoUri] = useState('');
@@ -140,6 +144,10 @@ export function CreatePinScreen({ navigation, route }: Props) {
     }
   }
 
+  function openMapPicker() {
+    navigation.navigate('PickLocation', { initialLat: lat, initialLon: lon });
+  }
+
   async function onSubmit() {
     if (!categoryId) {
       Alert.alert('Выберите категорию');
@@ -168,7 +176,7 @@ export function CreatePinScreen({ navigation, route }: Props) {
         photo_link,
         description: descr.trim() ? descr.trim() : null,
         category_id: categoryId,
-        status_id: isAdmin ? statusId : 'new',
+        status_id: 'new',
       };
 
       const created = await PinsApi.createPin(payload);
@@ -186,8 +194,17 @@ export function CreatePinScreen({ navigation, route }: Props) {
       <View style={styles.card}>
         <Text style={styles.h}>Местоположение</Text>
         <Text style={styles.small}>Координаты: {lat.toFixed(6)}, {lon.toFixed(6)}</Text>
-        <View style={{ marginTop: 10 }}>
-          <Button title="Использовать мою геопозицию" onPress={useMyLocation} disabled={busy} />
+        <View style={[styles.row, { marginTop: 10 }]}>
+          <View style={{ flex: 1 }}>
+            <Button title="Моя геопозиция" onPress={useMyLocation} disabled={busy} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button
+              title="Выбрать на карте"
+              onPress={() => navigation.navigate('PickLocation', { initialLat: lat, initialLon: lon })}
+              disabled={busy}
+            />
+          </View>
         </View>
       </View>
 
@@ -203,19 +220,6 @@ export function CreatePinScreen({ navigation, route }: Props) {
             />
           ))}
         </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.h}>Статус</Text>
-        {isAdmin ? (
-          <View style={styles.chipsRow}>
-            {STATUSES.map((s) => (
-              <Chip key={s.id} title={s.title} selected={statusId === s.id} onPress={() => setStatusId(s.id)} />
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.small}>Статус выставляет администратор. По умолчанию: «Новая».</Text>
-        )}
       </View>
 
       <View style={styles.card}>
@@ -272,6 +276,7 @@ const styles = StyleSheet.create({
   small: { fontSize: 12, opacity: 0.7 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   preview: { height: 180, borderRadius: 12, marginTop: 10, backgroundColor: '#f3f4f6' },
+  row: { flexDirection: 'row', gap: 10 },
   photoRow: { flexDirection: 'row', gap: 10 },
   remove: { paddingVertical: 8, alignItems: 'center' },
   removeText: { fontSize: 12, fontWeight: '800', opacity: 0.7 },

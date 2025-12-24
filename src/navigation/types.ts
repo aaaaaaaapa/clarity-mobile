@@ -12,7 +12,8 @@ export type AppTabsParamList = {
 export type AppStackParamList = {
   Tabs: NavigatorScreenParams<AppTabsParamList>;
   PinDetails: { pinId: number };
-  CreatePin: { initialLat: number; initialLon: number };
+  CreatePin: { initialLat: number; initialLon: number; pickedLat?: number; pickedLon?: number };
+  PickLocation: { initialLat: number; initialLon: number };
 };
 
 export type AuthStackParamList = {

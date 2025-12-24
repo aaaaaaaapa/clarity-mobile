@@ -16,6 +16,7 @@ import { CATEGORIES, STATUSES, categoryById, type RequestCategoryId, type Reques
 // Category and status are stored server-side.
 import type { AppStackParamList, AppTabsParamList } from '../navigation/types';
 import { DEFAULT_REGION } from '../utils/config';
+import { formatPinCreatedAt } from '../utils/datetime';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<AppTabsParamList, 'List'>,
@@ -121,6 +122,7 @@ export function PinsListScreen() {
         }
         renderItem={({ item }) => {
           const cat = categoryById((item.pin.category_id as any) ?? 'other');
+          const created = formatPinCreatedAt(item.pin as any);
           return (
             <Pressable
               onPress={() => navigation.navigate('PinDetails', { pinId: item.pin.id })}
@@ -136,7 +138,7 @@ export function PinsListScreen() {
                 {item.pin.description?.trim() ? item.pin.description : '—'}
               </Text>
               <Text style={styles.small} numberOfLines={1}>
-                #{item.pin.id} · {item.pin.y.toFixed(4)}, {item.pin.x.toFixed(4)}
+                #{item.pin.id}{created ? ` · ${created}` : ''} · {item.pin.y.toFixed(4)}, {item.pin.x.toFixed(4)}
               </Text>
             </Pressable>
           );

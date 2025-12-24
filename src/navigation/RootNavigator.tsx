@@ -12,6 +12,7 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { PinsListScreen } from '../screens/PinsListScreen';
 import { PinDetailsScreen } from '../screens/PinDetailsScreen';
 import { CreatePinScreen } from '../screens/CreatePinScreen';
+import { PickLocationScreen } from '../screens/PickLocationScreen';
 
 import type { AppStackParamList, AppTabsParamList, AuthStackParamList } from './types';
 
@@ -39,6 +40,11 @@ function AppStackScreens() {
         name="CreatePin"
         component={CreatePinScreen}
         options={{ title: 'Новая заявка', presentation: 'modal' }}
+      />
+      <AppStack.Screen
+        name="PickLocation"
+        component={PickLocationScreen}
+        options={{ title: 'Выбор места', presentation: 'modal' }}
       />
     </AppStack.Navigator>
   );
