@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -17,6 +17,9 @@ import { CATEGORIES, STATUSES, categoryById, type RequestCategoryId, type Reques
 import type { AppStackParamList, AppTabsParamList } from '../navigation/types';
 import { DEFAULT_REGION } from '../utils/config';
 import { formatPinCreatedAt } from '../utils/datetime';
+import { useAuth } from '../context/AuthContext';
+import { getPinOwnerId } from '../utils/pinOwner';
+import { isAdminUser } from '../utils/admin';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<AppTabsParamList, 'List'>,
@@ -25,13 +28,16 @@ type Nav = CompositeNavigationProp<
 
 export function PinsListScreen() {
   const navigation = useNavigation<Nav>();
+  const { user, token } = useAuth();
+  const isAdmin = isAdminUser(user as any, token);
+  const currentUserId = user?.id ?? null;
   const [pins, setPins] = useState<Pin[]>([]);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<RequestStatusId | 'all'>('all');
   const [category, setCategory] = useState<RequestCategoryId | 'all'>('all');
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setBusy(true);
       const data = await PinsApi.getPins(0, 500);
@@ -42,11 +48,14 @@ export function PinsListScreen() {
     } finally {
       setBusy(false);
     }
-  }
-
-  useEffect(() => {
-    load();
   }, []);
+
+  // Обновляем список каждый раз при возврате на вкладку (например, после удаления/редактирования заявки).
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -123,16 +132,43 @@ export function PinsListScreen() {
         renderItem={({ item }) => {
           const cat = categoryById((item.pin.category_id as any) ?? 'other');
           const created = formatPinCreatedAt(item.pin as any);
+          const ownerId = getPinOwnerId(item.pin as any);
+          const isOwner = !!currentUserId && ownerId === currentUserId;
+          const stId = ((item.pin.status_id as any) ?? 'new') as RequestStatusId;
+          const canDelete = isAdmin || (isOwner && stId === 'new');
+
+          const onLongPress = () => {
+            if (!canDelete) return;
+            Alert.alert('Удалить заявку?', 'Действие необратимо.', [
+              { text: 'Отмена', style: 'cancel' },
+              {
+                text: 'Удалить',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    setBusy(true);
+                    await PinsApi.deletePin(item.pin.id);
+                    setPins((prev) => prev.filter((p) => p.id !== item.pin.id));
+                  } catch (e) {
+                    Alert.alert('Не удалось удалить', toFriendlyError(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                },
+              },
+            ]);
+          };
           return (
             <Pressable
               onPress={() => navigation.navigate('PinDetails', { pinId: item.pin.id })}
+              onLongPress={onLongPress}
               style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                 <Text style={styles.cardTitle} numberOfLines={1}>
                   {cat.emoji} {cat.title}
                 </Text>
-                <StatusBadge statusId={((item.pin.status_id as any) ?? 'new') as any} />
+                <StatusBadge statusId={stId as any} />
               </View>
               <Text style={styles.text} numberOfLines={2}>
                 {item.pin.description?.trim() ? item.pin.description : '—'}
@@ -140,6 +176,7 @@ export function PinsListScreen() {
               <Text style={styles.small} numberOfLines={1}>
                 #{item.pin.id}{created ? ` · ${created}` : ''} · {item.pin.y.toFixed(4)}, {item.pin.x.toFixed(4)}
               </Text>
+              {canDelete ? <Text style={styles.hint}>Долгое нажатие: удалить</Text> : null}
             </Pressable>
           );
         }}
@@ -160,4 +197,5 @@ const styles = StyleSheet.create({
   text: { fontSize: 14 },
   small: { fontSize: 12, opacity: 0.7 },
   empty: { paddingVertical: 30, alignItems: 'center' },
+  hint: { fontSize: 11, opacity: 0.55, marginTop: 2 },
 });

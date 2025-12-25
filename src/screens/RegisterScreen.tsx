@@ -3,6 +3,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
+import { KeyboardForm } from '../components/KeyboardForm';
 import { register } from '../api/auth';
 import type { AuthStackParamList } from '../navigation/types';
 import { toFriendlyError } from '../api/client';
@@ -39,7 +40,7 @@ export function RegisterScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardForm contentContainerStyle={styles.container}>
       <View style={styles.form}>
         <Input label="Телефон" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+7XXXXXXXXXX" />
         <Input label="Email (необязательно)" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="name@example.com" />
@@ -49,7 +50,7 @@ export function RegisterScreen({ navigation }: Props) {
         <Button title={busy ? 'Создаём…' : 'Зарегистрироваться'} onPress={onSubmit} disabled={busy} />
         <Button title="Уже есть аккаунт" onPress={() => navigation.navigate('Login')} disabled={busy} />
       </View>
-    </View>
+    </KeyboardForm>
   );
 }
 

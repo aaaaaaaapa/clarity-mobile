@@ -3,6 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
+import { KeyboardForm } from '../components/KeyboardForm';
 import { useAuth } from '../context/AuthContext';
 import type { AuthStackParamList } from '../navigation/types';
 import { toFriendlyError } from '../api/client';
@@ -31,7 +32,7 @@ export function LoginScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardForm contentContainerStyle={styles.container}>
       <Text style={styles.h1}>Clarity</Text>
       <Text style={styles.sub}>Войдите, чтобы увидеть карту и метки</Text>
 
@@ -44,7 +45,7 @@ export function LoginScreen({ navigation }: Props) {
       <Text style={styles.link} onPress={() => navigation.navigate('Register')}>
         Нет аккаунта? Регистрация
       </Text>
-    </View>
+    </KeyboardForm>
   );
 }
 

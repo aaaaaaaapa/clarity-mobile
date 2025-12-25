@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Button } from '../components/Button';
 import { Chip } from '../components/Chip';
 import { Input } from '../components/Input';
+import { KeyboardForm } from '../components/KeyboardForm';
 import { toFriendlyError } from '../api/client';
 import * as PinsApi from '../api/pins';
 import type { PinCreate } from '../types/api';
@@ -190,7 +191,7 @@ export function CreatePinScreen({ navigation, route }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <KeyboardForm contentContainerStyle={styles.container} extraBottomPadding={24}>
       <View style={styles.card}>
         <Text style={styles.h}>Местоположение</Text>
         <Text style={styles.small}>Координаты: {lat.toFixed(6)}, {lon.toFixed(6)}</Text>
@@ -265,7 +266,7 @@ export function CreatePinScreen({ navigation, route }: Props) {
         onPress={onSubmit}
         disabled={busy || !categoryId || !photoUri.trim()}
       />
-    </ScrollView>
+    </KeyboardForm>
   );
 }
 

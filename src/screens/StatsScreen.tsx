@@ -6,10 +6,11 @@ import type { Pin } from '../types/api';
 import { Button } from '../components/Button';
 import { CATEGORIES, STATUSES } from '../constants/requests';
 import { useAuth } from '../context/AuthContext';
+import { isAdminUser } from '../utils/admin';
 
 export function StatsScreen() {
-  const { user } = useAuth();
-  const isAdmin = user?.role_id === 2;
+  const { user, token } = useAuth();
+  const isAdmin = isAdminUser(user as any, token);
   const currentUserId = user?.id ?? null;
 
   const [pins, setPins] = useState<Pin[]>([]);
@@ -73,7 +74,7 @@ export function StatsScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.h}>{isAdmin ? 'Всего заявок' : 'Мои заявки'}</Text>
+        <Text style={styles.h}>{isAdmin ? 'Общих заявок' : 'Мои заявки'}</Text>
         <Text style={styles.big}>{stats.total}</Text>
       </View>
 

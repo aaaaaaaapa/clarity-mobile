@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 
 import { toFriendlyError } from '../api/client';
 import * as PinsApi from '../api/pins';
@@ -120,7 +120,7 @@ export function MapScreen() {
   // текущая позиция пользователя
   const [userPos, setUserPos] = useState<LatLng | null>(null);
 
-  async function loadPins() {
+  const loadPins = useCallback(async () => {
     try {
       setBusy(true);
       const data = await PinsApi.getPins(0, 500);
@@ -130,12 +130,19 @@ export function MapScreen() {
     } finally {
       setBusy(false);
     }
-  }
+  }, []);
 
   // грузим метки только когда есть токен
   useEffect(() => {
     if (token) loadPins();
-  }, [token]);
+  }, [token, loadPins]);
+
+  // Обновляем карту при возврате на вкладку (например, после удаления/редактирования заявки).
+  useFocusEffect(
+    useCallback(() => {
+      if (token) loadPins();
+    }, [token, loadPins])
+  );
 
 
   // геолокация + маркер текущего местоположения (с обновлением)

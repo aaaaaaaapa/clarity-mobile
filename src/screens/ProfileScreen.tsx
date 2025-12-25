@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Modal, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { useAuth } from '../context/AuthContext';
@@ -105,18 +105,30 @@ export function ProfileScreen() {
 
       <Modal visible={editOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Редактирование профиля</Text>
-            <View style={{ gap: 12, marginTop: 12 }}>
-              <Input label="Телефон" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-              <Input label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
-              <Input label="Username" value={login} onChangeText={setLogin} />
-              <Input label="Пароль (обязательно)" value={password} onChangeText={setPassword} secureTextEntry />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%' }}
+          >
+            <View style={styles.modalCard}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 16 }}
+              >
+                <Text style={styles.modalTitle}>Редактирование профиля</Text>
+                <View style={{ gap: 12, marginTop: 12 }}>
+                  <Input label="Телефон" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+                  <Input label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+                  <Input label="Username" value={login} onChangeText={setLogin} />
+                  <Input label="Пароль (обязательно)" value={password} onChangeText={setPassword} secureTextEntry />
 
-              <Button title={busy ? 'Сохраняем…' : 'Сохранить'} onPress={onSave} disabled={busy} />
-              <Button title="Отмена" onPress={() => setEditOpen(false)} disabled={busy} />
+                  <Button title={busy ? 'Сохраняем…' : 'Сохранить'} onPress={onSave} disabled={busy} />
+                  <Button title="Отмена" onPress={() => setEditOpen(false)} disabled={busy} />
+                </View>
+              </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -129,6 +141,12 @@ const styles = StyleSheet.create({
   h: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
   line: { fontSize: 14 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
-  modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16 },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 16,
+    maxHeight: '85%',
+  },
   modalTitle: { fontSize: 20, fontWeight: '800' },
 });

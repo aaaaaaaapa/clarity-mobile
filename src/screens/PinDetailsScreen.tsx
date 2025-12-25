@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { Chip } from '../components/Chip';
 import { Input } from '../components/Input';
 import { StatusBadge } from '../components/StatusBadge';
+import { KeyboardForm } from '../components/KeyboardForm';
 import { toFriendlyError } from '../api/client';
 import * as PinsApi from '../api/pins';
 import type { Pin, PinCreate } from '../types/api';
@@ -15,29 +16,16 @@ import type { AppStackParamList } from '../navigation/types';
 import { isLocalPhotoUri, photoToImageUri } from '../utils/photo';
 import { formatPinCreatedAt } from '../utils/datetime';
 import { useAuth } from '../context/AuthContext';
+import { getPinOwnerId } from '../utils/pinOwner';
+import { isAdminUser } from '../utils/admin';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PinDetails'>;
-
-function getPinOwnerId(pin: any): number | null {
-  const raw =
-    pin?.owner_id ??
-    pin?.ownerId ??
-    pin?.user_id ??
-    pin?.userId ??
-    pin?.created_by ??
-    pin?.creator_id ??
-    pin?.createdBy ??
-    null;
-
-  const num = typeof raw === 'string' ? Number(raw) : raw;
-  return Number.isFinite(num) ? Number(num) : null;
-}
 
 export function PinDetailsScreen({ navigation, route }: Props) {
   const { pinId } = route.params;
 
-  const { user } = useAuth();
-  const isAdmin = user?.role_id === 2;
+  const { user, token } = useAuth();
+  const isAdmin = isAdminUser(user as any, token);
   const currentUserId = user?.id ?? null;
 
   const [pin, setPin] = useState<Pin | null>(null);
@@ -61,6 +49,7 @@ export function PinDetailsScreen({ navigation, route }: Props) {
   const ownerId = useMemo(() => (pin ? getPinOwnerId(pin as any) : null), [pin]);
   const isOwner = !!currentUserId && ownerId === currentUserId;
   const canEdit = isAdmin || (isOwner && statusId === 'new');
+  const canDelete = isAdmin || (isOwner && statusId === 'new');
   const showNoEditNote = isOwner && !isAdmin && statusId !== 'new';
 
   async function load() {
@@ -236,6 +225,38 @@ export function PinDetailsScreen({ navigation, route }: Props) {
     }
   }
 
+  function onDelete() {
+    if (!pin) return;
+
+    if (!canDelete) {
+      Alert.alert(
+        'Удаление недоступно',
+        'Удалять заявку может её создатель только в статусе «Новая» либо администратор.'
+      );
+      return;
+    }
+
+    Alert.alert('Удалить заявку?', 'Действие необратимо.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setBusy(true);
+            await PinsApi.deletePin(pin.id);
+            Alert.alert('Удалено', 'Заявка удалена');
+            navigation.goBack();
+          } catch (e) {
+            Alert.alert('Не удалось удалить', toFriendlyError(e));
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  }
+
   function openOnMap() {
     if (!pin) return;
     // Возвращаемся на вкладку «Карта» и просим сфокусироваться на координатах
@@ -268,7 +289,7 @@ export function PinDetailsScreen({ navigation, route }: Props) {
   const st = statusById(statusId);
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <KeyboardForm contentContainerStyle={styles.container} extraBottomPadding={24}>
       <View style={styles.card}>
         <Text style={styles.h}>Заявка #{pin.id}</Text>
         <StatusBadge statusId={statusId} />
@@ -392,10 +413,20 @@ export function PinDetailsScreen({ navigation, route }: Props) {
             ) : null}
 
             {canEdit ? <Button title="Редактировать" onPress={() => setEdit(true)} /> : null}
+
+            {canDelete ? (
+              <Pressable
+                onPress={onDelete}
+                style={({ pressed }) => [styles.dangerBtn, pressed && { opacity: 0.9 }]}
+                disabled={busy}
+              >
+                <Text style={styles.dangerBtnText}>{busy ? 'Удаляем…' : 'Удалить заявку'}</Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </View>
-    </ScrollView>
+    </KeyboardForm>
   );
 }
 
@@ -412,4 +443,13 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', gap: 10 },
   remove: { paddingVertical: 8, alignItems: 'center' },
   removeText: { fontSize: 12, fontWeight: '800', opacity: 0.7 },
+
+  dangerBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#b91c1c',
+    alignItems: 'center',
+  },
+  dangerBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

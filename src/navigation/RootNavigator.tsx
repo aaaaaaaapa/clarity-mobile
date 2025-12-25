@@ -1,35 +1,19 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
-import { MapScreen } from '../screens/MapScreen';
-import { StatsScreen } from '../screens/StatsScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
-import { PinsListScreen } from '../screens/PinsListScreen';
 import { PinDetailsScreen } from '../screens/PinDetailsScreen';
 import { CreatePinScreen } from '../screens/CreatePinScreen';
 import { PickLocationScreen } from '../screens/PickLocationScreen';
 
-import type { AppStackParamList, AppTabsParamList, AuthStackParamList } from './types';
+import type { AppStackParamList, AuthStackParamList } from './types';
+import { AppTabs } from './tabs';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
-const Tabs = createBottomTabNavigator<AppTabsParamList>();
-
-function AppTabs() {
-  return (
-    <Tabs.Navigator screenOptions={{ headerShown: true }}>
-      <Tabs.Screen name="Map" component={MapScreen} options={{ title: 'Карта' }} />
-      <Tabs.Screen name="List" component={PinsListScreen} options={{ title: 'Список' }} />
-      <Tabs.Screen name="Stats" component={StatsScreen} options={{ title: 'Статистика' }} />
-      <Tabs.Screen name="Profile" component={ProfileScreen} options={{ title: 'Профиль' }} />
-    </Tabs.Navigator>
-  );
-}
 
 function AppStackScreens() {
   return (
